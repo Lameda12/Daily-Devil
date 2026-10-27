@@ -32,6 +32,7 @@ export class Game {
   private readonly parts = new Particles()
   private crowd: HTMLCanvasElement | null = null
   private raf = 0
+  private running = false
   private last = 0
   private acc = 0
   private freeze = 0
@@ -59,19 +60,37 @@ export class Game {
     }
   }
 
+  /**
+   * Draw the level once and sleep until the first input: nothing moves before
+   * the player does, so there's no reason to burn frames (or battery) on load.
+   */
   start() {
     this.input.attach()
+    this.input.onAnyInput = () => this.wake()
+    this.redraw()
+  }
+
+  wake() {
+    if (this.running) return
+    this.running = true
     this.last = performance.now()
-    const frame = (now: number) => {
-      this.raf = requestAnimationFrame(frame)
-      this.frame(now)
-    }
-    this.raf = requestAnimationFrame(frame)
+    this.raf = requestAnimationFrame(this.loop)
   }
 
   stop() {
+    this.running = false
     cancelAnimationFrame(this.raf)
     this.input.detach()
+  }
+
+  private loop = (now: number) => {
+    if (!this.running) return
+    this.raf = requestAnimationFrame(this.loop)
+    this.frame(now)
+  }
+
+  redraw() {
+    if (!this.running) renderWorld(this.ctx, this.world, this.look, this.crowd, this.own, this.parts)
   }
 
   setCrowd(marks: ArrayLike<number>) {
@@ -82,6 +101,7 @@ export class Game {
       this.crowd.height = T.VIEW_H
     }
     renderCrowd(marks, this.crowd)
+    this.redraw()
   }
 
   /** Fresh attempt without counting a death (practice runs, replays). */
@@ -93,6 +113,7 @@ export class Game {
     this.acc = 0
     this.hash = FNV_OFFSET
     this.look.showPlayer = true
+    this.redraw()
   }
 
   private frame(now: number) {

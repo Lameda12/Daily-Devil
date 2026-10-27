@@ -137,12 +137,15 @@ export class World {
     this.t += dt
     this.tick++
 
-    for (const s of this.solids) s.dx = s.dy = 0
-    for (const trap of this.traps) trap.update(this, dt)
+    const solids = this.solids
+    const traps = this.traps
+    for (let i = 0; i < solids.length; i++) solids[i].dx = solids[i].dy = 0
+    for (let i = 0; i < traps.length; i++) traps[i].update(this, dt)
     this.updateDoor(dt)
 
     // Anything that moved into the player crushes them, except the floor they ride.
-    for (const s of this.solids) {
+    for (let i = 0; i < solids.length; i++) {
+      const s = solids[i]
       if (!s.collide || (s.dx === 0 && s.dy === 0) || s === p.ground) continue
       if (overlaps(p, s)) return this.die('crush')
     }
@@ -153,15 +156,18 @@ export class World {
       } else if (p.ground.dx !== 0 || p.ground.dy !== 0) {
         p.x += p.ground.dx
         p.y += p.ground.dy
-        for (const s of this.solids) if (s.collide && s !== p.ground && overlaps(p, s)) return this.die('crush')
+        for (let i = 0; i < solids.length; i++) {
+          const s = solids[i]
+          if (s.collide && s !== p.ground && overlaps(p, s)) return this.die('crush')
+        }
       }
     }
 
     // Input, with the reverse zone swapping directions. Hysteresis: it switches on when your
     // center crosses in and only switches off once your whole body is out.
     const cx = p.x + p.w / 2
-    for (let i = 0; i < this.traps.length; i++) {
-      const z = this.traps[i].reverseZone
+    for (let i = 0; i < traps.length; i++) {
+      const z = traps[i].reverseZone
       if (!z) continue
       if (!this.reversed && cx >= z.x && cx <= z.x + z.w) this.reversed = true
       else if (this.reversed && (p.x >= z.x + z.w || p.x + p.w <= z.x)) this.reversed = false
@@ -198,7 +204,8 @@ export class World {
 
     // Horizontal move and resolve.
     p.x += p.vx * dt
-    for (const s of this.solids) {
+    for (let i = 0; i < solids.length; i++) {
+      const s = solids[i]
       if (!s.collide || !overlaps(p, s)) continue
       if (p.vx > 0) p.x = s.x - p.w
       else if (p.vx < 0) p.x = s.x + s.w
@@ -212,7 +219,8 @@ export class World {
     p.y += p.vy * dt
     p.grounded = false
     p.ground = null
-    for (const s of this.solids) {
+    for (let i = 0; i < solids.length; i++) {
+      const s = solids[i]
       if (!s.collide || !overlaps(p, s)) continue
       if (p.vy >= 0) {
         p.y = s.y - p.h
@@ -229,10 +237,12 @@ export class World {
     }
     p.airTime = p.grounded ? 0 : p.airTime + dt
 
-    for (const trap of this.traps) trap.after?.(this)
+    for (let i = 0; i < traps.length; i++) traps[i].after?.(this)
 
     // Spikes, with an inset kill box.
-    for (const h of this.hazards) {
+    const hazards = this.hazards
+    for (let i = 0; i < hazards.length; i++) {
+      const h = hazards[i]
       if (!h.active) continue
       if (p.x < h.x + h.w - 1 && p.x + p.w > h.x + 1 && p.y < h.y + h.h && p.y + p.h > h.y + 2) return this.die('spike')
     }

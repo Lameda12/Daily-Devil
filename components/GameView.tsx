@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Sfx } from '@/game/audio'
-import { dayKey, formatCountdown, formatTime, levelNumber, msUntilNextDay } from '@/game/day'
+import { addDays, dayKey, formatCountdown, formatTime, levelNumber, msUntilNextDay } from '@/game/day'
 import { Game } from '@/game/engine'
 import { generateLevel } from '@/game/level'
 import { type ClearRecord, type DayState, type MotionPref, type Streak, liveStreak, loadDay, loadSettings, pruneDays, recordStreak, saveDay, saveSettings } from '@/lib/client/local'
@@ -40,6 +40,7 @@ export default function GameView({ mode, day: fixedDay }: { mode: Mode; day?: st
   const [streak, setStreak] = useState<Streak>({ current: 0, best: 0, last: null })
   const [settings, setSettings] = useState<{ muted: boolean; motion: MotionPref }>({ muted: false, motion: 'auto' })
   const [stale, setStale] = useState(false)
+  const [hasCleared, setHasCleared] = useState(false)
 
   // Mutable game-session state the loop callbacks read without re-rendering.
   const s = useRef({
@@ -48,7 +49,7 @@ export default function GameView({ mode, day: fixedDay }: { mode: Mode; day?: st
     practiceDeaths: 0,
     practiceStart: null as number | null,
     motion: 'auto' as MotionPref,
-    mq: null as MediaQueryList | null,
+    prefersReduced: false,
   })
 
   useEffect(() => {
@@ -56,8 +57,12 @@ export default function GameView({ mode, day: fixedDay }: { mode: Mode; day?: st
     setSettings(st)
     s.current.motion = st.motion
     sfxRef.current.muted = st.muted
-    s.current.mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const onMq = () => (s.current.prefersReduced = mq.matches)
+    onMq()
+    mq.addEventListener('change', onMq)
     if (!fixedDay) setDay(dayKey())
+    return () => mq.removeEventListener('change', onMq)
   }, [fixedDay])
 
   const refreshStats = useCallback(async (d: string) => {
@@ -78,8 +83,7 @@ export default function GameView({ mode, day: fixedDay }: { mode: Mode; day?: st
       setStreak(liveStreak(day))
     }
     if (local?.cleared) {
-      ss.practice = true
-      setPractice(true)
+      setHasCleared(true)
       setDialog({ record: local.cleared, practice: false })
     }
 
@@ -88,7 +92,7 @@ export default function GameView({ mode, day: fixedDay }: { mode: Mode; day?: st
 
     const game = new Game(canvas, generateLevel(day), {
       sfx: sfxRef.current,
-      reducedMotion: () => ss.motion === 'reduce' || (ss.motion === 'auto' && !!ss.mq?.matches),
+      reducedMotion: () => ss.motion === 'reduce' || (ss.motion === 'auto' && ss.prefersReduced),
       hooks: {
         onFirstInput() {
           if (isRecording() && ss.local && !ss.local.firstInputAt) {
@@ -120,8 +124,7 @@ export default function GameView({ mode, day: fixedDay }: { mode: Mode; day?: st
             void reporter?.flush().then(() =>
               postClear({ day, deaths: record.deaths, timeMs: record.timeMs, inputsHash }).then(() => refreshStats(day)),
             )
-            ss.practice = true
-            setPractice(true)
+            setHasCleared(true)
             setDialog({ record, practice: false })
           } else {
             const timeMs = Date.now() - (ss.practiceStart ?? Date.now())
@@ -137,6 +140,7 @@ export default function GameView({ mode, day: fixedDay }: { mode: Mode; day?: st
     if (process.env.NODE_ENV !== 'production') (window as unknown as { __dd?: Game }).__dd = game
     game.input.enabled = !local?.cleared
     game.start()
+    if (local?.marks.length) game.redraw()
     reporter?.start()
     canvas.focus({ preventScroll: true })
     void refreshStats(day)
@@ -180,11 +184,13 @@ export default function GameView({ mode, day: fixedDay }: { mode: Mode; day?: st
   }, [])
 
   const closeDialog = useCallback(() => {
-    setDialog(null)
     const game = gameRef.current
-    if (game && game.world.status !== 'cleared') game.input.enabled = true
+    // Once the day is cleared (or after a practice clear), anything further is practice.
+    if (s.current.practice || s.current.local?.cleared || game?.world.status === 'cleared') return startPractice()
+    setDialog(null)
+    if (game) game.input.enabled = true
     canvasRef.current?.focus({ preventScroll: true })
-  }, [])
+  }, [startPractice])
 
   const toggleMute = () => {
     const next = { ...settings, muted: !settings.muted }
@@ -209,7 +215,7 @@ export default function GameView({ mode, day: fixedDay }: { mode: Mode; day?: st
     <main className="mx-auto flex w-full max-w-[1000px] flex-col gap-3 px-4 py-4 sm:py-6">
       <header className="flex items-end justify-between gap-3">
         <div>
-          <h1 className="font-pixel text-2xl leading-none tracking-wide text-bone sm:text-3xl">
+          <h1 className="whitespace-nowrap font-pixel text-xl leading-none tracking-wide text-bone sm:text-3xl">
             Daily <span className="text-blood">Devil</span>
           </h1>
           <p className="mt-1 h-4 text-xs text-mute">
@@ -217,7 +223,7 @@ export default function GameView({ mode, day: fixedDay }: { mode: Mode; day?: st
             {mode === 'archive' ? ' · archive practice' : ''}
           </p>
         </div>
-        <nav className="flex gap-2 text-xs">
+        <nav className="flex shrink-0 gap-2 whitespace-nowrap text-[11px] sm:text-xs">
           <button type="button" onClick={toggleMute} aria-pressed={settings.muted} className="border border-line px-2 py-1 text-mute hover:text-bone">
             Sound {settings.muted ? 'off' : 'on'}
           </button>
@@ -263,7 +269,7 @@ export default function GameView({ mode, day: fixedDay }: { mode: Mode; day?: st
 
       <TouchPads getGame={() => gameRef.current} />
 
-      <p className="min-h-5 text-xs text-mute sm:text-sm" aria-live="polite">
+      <p className="min-h-8 text-xs text-mute sm:min-h-5 sm:text-sm" aria-live="polite">
         {stats === null && ' '}
         {stats === 'offline' && 'Offline: crowd stats are unavailable. Your progress is saved on this device.'}
         {st && (
@@ -281,12 +287,27 @@ export default function GameView({ mode, day: fixedDay }: { mode: Mode; day?: st
         )}
       </p>
 
+      <section className="grid gap-3 border-t border-line pt-4 text-sm leading-relaxed text-mute sm:grid-cols-[1fr_auto]">
+        <p>
+          One level a day, the same for everyone on Earth. It looks harmless. It isn’t: floors give way, spikes wake up, ceilings fall
+          and the door has opinions. Every faint <span className="font-pixel text-bone">X</span> is where someone died today. Read the crowd, then go.
+        </p>
+        <p className="font-pixel text-xs leading-5 text-mute sm:text-right">
+          New level at 00:00 UTC
+          <br />
+          Practice runs don’t count
+        </p>
+      </section>
+
       <footer className="flex flex-wrap items-center justify-between gap-2 text-xs text-mute">
         <span className="pointer-coarse:hidden">Arrows or WASD to move · Space to jump · faint X = someone died there</span>
         <span className="hidden pointer-coarse:inline">Faint X = someone died there</span>
         <span className="flex gap-3">
           {mode === 'archive' && <Link href="/" className="underline decoration-line underline-offset-4 hover:text-bone">Today’s level</Link>}
-          {practice && mode === 'daily' && dialog === null && streak.last === day && (
+          {mode === 'daily' && day && levelNumber(day) > 1 && (
+            <Link href={`/d/${addDays(day, -1)}`} className="underline decoration-line underline-offset-4 hover:text-bone">Yesterday’s level</Link>
+          )}
+          {hasCleared && mode === 'daily' && dialog === null && (
             <button type="button" className="underline decoration-line underline-offset-4 hover:text-bone" onClick={() => s.current.local?.cleared && setDialog({ record: s.current.local.cleared, practice: false })}>
               Your result
             </button>

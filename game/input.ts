@@ -21,6 +21,7 @@ export class Input {
   private pad: InputState = { left: false, right: false, jump: false }
   private touched = false
   onFirstInput: (() => void) | null = null
+  onAnyInput: (() => void) | null = null
   enabled = true
 
   private onKeyDown = (e: KeyboardEvent) => {
@@ -75,6 +76,7 @@ export class Input {
     s.left = this.kb.left || this.pad.left
     s.right = this.kb.right || this.pad.right
     s.jump = this.kb.jump || this.pad.jump
+    if (s.left || s.right || s.jump) this.onAnyInput?.()
     if (!this.touched && (s.left || s.right || s.jump)) {
       this.touched = true
       this.onFirstInput?.()

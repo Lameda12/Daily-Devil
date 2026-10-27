@@ -103,8 +103,8 @@ export function renderWorld(
   ctx.setTransform(1, 0, 0, 1, Math.round(look.shakeX), Math.round(look.shakeY))
 
   // Reverse strips: tinted band, dashed edges, a swap glyph.
-  for (const trap of w.traps) {
-    const z = trap.reverseZone
+  for (let i = 0; i < w.traps.length; i++) {
+    const z = w.traps[i].reverseZone
     if (!z) continue
     ctx.fillStyle = C.ZONE
     ctx.fillRect(z.x, T.CEIL_Y, z.w, T.FLOOR_Y - T.CEIL_Y)
@@ -124,13 +124,14 @@ export function renderWorld(
   if (crowd) ctx.drawImage(crowd, 0, 0)
 
   ctx.fillStyle = C.WALL
-  for (const h of w.hazards) if (h.visible) drawSpikes(ctx, h)
+  for (let i = 0; i < w.hazards.length; i++) if (w.hazards[i].visible) drawSpikes(ctx, w.hazards[i])
 
   drawDoor(ctx, w)
 
-  for (const s of w.solids) {
+  ctx.fillStyle = C.WALL
+  for (let i = 0; i < w.solids.length; i++) {
+    const s = w.solids[i]
     if (!s.visible || s.y > T.VIEW_H || s.y + s.h < 0) continue
-    ctx.fillStyle = C.WALL
     ctx.fillRect(Math.round(s.x), Math.round(s.y), s.w, s.h)
   }
 
