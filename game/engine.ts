@@ -39,6 +39,8 @@ export class Game {
   private shake = 0
   private runClock = 0
   private hash = FNV_OFFSET
+  /** Optional recorded input tape (dev tooling): one encoded input per tick, replaces live input. */
+  tape: Uint8Array | null = null
   private readonly look: Look = { sx: 1, sy: 1, runFrame: 0, shakeX: 0, shakeY: 0, showPlayer: true }
 
   constructor(
@@ -143,6 +145,12 @@ export class Game {
   private tick() {
     const w = this.world
     const s = this.input.state
+    if (this.tape) {
+      const b = this.world.tick < this.tape.length ? this.tape[this.world.tick] : 0
+      s.left = (b & 1) !== 0
+      s.right = (b & 2) !== 0
+      s.jump = (b & 4) !== 0
+    }
     this.hash = Math.imul(this.hash ^ encodeInput(s.left, s.right, s.jump), FNV_PRIME) >>> 0
     w.step(s)
     const ev = w.events

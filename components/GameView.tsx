@@ -134,6 +134,7 @@ export default function GameView({ mode, day: fixedDay }: { mode: Mode; day?: st
     })
     if (local) game.own.load(local.marks)
     gameRef.current = game
+    if (process.env.NODE_ENV !== 'production') (window as unknown as { __dd?: Game }).__dd = game
     game.input.enabled = !local?.cleared
     game.start()
     reporter?.start()
@@ -267,7 +268,7 @@ export default function GameView({ mode, day: fixedDay }: { mode: Mode; day?: st
         {stats === 'offline' && 'Offline: crowd stats are unavailable. Your progress is saved on this device.'}
         {st && (
           <>
-            <span className="text-bone">{nf.format(st.players)}</span> players · <span className="text-bone">{nf.format(st.totalDeaths)}</span> deaths ·{' '}
+            <span className="text-bone">{nf.format(st.players)}</span> {st.players === 1 ? 'player' : 'players'} · <span className="text-bone">{nf.format(st.totalDeaths)}</span> deaths ·{' '}
             <span className="text-bone">{st.players ? Math.round((st.clears / st.players) * 100) : 0}%</span> cleared ·{' '}
             {st.clears ? (
               <>

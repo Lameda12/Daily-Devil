@@ -157,12 +157,14 @@ export class World {
       }
     }
 
-    // Input, with the reverse zone swapping directions.
+    // Input, with the reverse zone swapping directions. Hysteresis: it switches on when your
+    // center crosses in and only switches off once your whole body is out.
     const cx = p.x + p.w / 2
-    this.reversed = false
-    for (const trap of this.traps) {
-      const z = trap.reverseZone
-      if (z && cx >= z.x && cx <= z.x + z.w) this.reversed = true
+    for (let i = 0; i < this.traps.length; i++) {
+      const z = this.traps[i].reverseZone
+      if (!z) continue
+      if (!this.reversed && cx >= z.x && cx <= z.x + z.w) this.reversed = true
+      else if (this.reversed && (p.x >= z.x + z.w || p.x + p.w <= z.x)) this.reversed = false
     }
     let dir = (input.right ? 1 : 0) - (input.left ? 1 : 0)
     if (this.reversed) dir = -dir
